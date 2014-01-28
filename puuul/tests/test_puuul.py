@@ -39,3 +39,20 @@ class TestPuuul(unittest.TestCase):
             task = pool.do(fn)
             task.cancel()
             self.assertRaises(CancellationException, task)
+            
+    def test_04_01_recursion(self):
+        # Run towers of hanoi to make sure we don't starve threads when
+        # we execute on the thread pool from within the pool
+        #
+        # Thank you http://www.cs.cmu.edu/~cburch/survey/recurse/hanoiimpl.html
+        def towers(disk, source, dest, spare, pool):
+            if disk == 0:
+                return [(source, dest)]
+            return pool.do(towers, disk - 1, source, spare, dest, pool)() + \
+                   [(source, dest)] + \
+                   pool.do(towers, disk - 1, spare, dest, source, pool)()
+        with ThreadPool(1) as pool:
+            task = pool.do(towers, 5, "A", "B", "C", pool)
+            result = task()
+            self.assertEqual(len(result), 2**6 - 1)
+            

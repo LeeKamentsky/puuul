@@ -29,6 +29,15 @@ def check_cancel():
             assert state in (Task.STATE_CANCELING, Task.STATE_RUNNING), "Task is not in a cancelling or running state. State = " + state
             if task.get_state() == Task.STATE_CANCELING:
                 raise CancellationException()
+            
+def is_inside_task_run():
+    '''Return True if the current thread is running a task
+    
+    Checks to see if this stack frame has been called from a task's run method.
+    '''
+    global _thread_local
+    return hasattr(_thread_local, _K_CURRENT_TASK) and \
+           isinstance(getattr(_thread_local, _K_CURRENT_TASK), Task)
         
 class Task(object):
     STATE_BLOCKED = "Blocked"
@@ -177,6 +186,11 @@ class Task(object):
                 with _lock:
                     if self.__get_state() != Task.STATE_READY:
                         return False
+                    if hasattr(_thread_local, _K_CURRENT_TASK):
+                        self.__old_current_task = getattr(
+                            _thread_local, _K_CURRENT_TASK)
+                    else:
+                        self.__old_current_task = None
                     setattr(_thread_local, _K_CURRENT_TASK, self.__task)
                     _running_tasks.append(self.__task)
                     self.__set_running()
@@ -185,7 +199,8 @@ class Task(object):
             def __exit__(self, exc_type, exc_value, traceback):
                 global _lock, _thread_local, _running_tasks
                 with _lock:
-                    setattr(_thread_local, _K_CURRENT_TASK, None)
+                    setattr(_thread_local, _K_CURRENT_TASK, 
+                            self.__old_current_task)
                     _running_tasks.remove(self.__task)
         try:
             with RunningTaskGuard(

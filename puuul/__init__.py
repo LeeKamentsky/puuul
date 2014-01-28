@@ -11,7 +11,7 @@ and synchronizing and joining.
 #
 from ._puuul import ThreadPool, start, stop, do
 from ._cancellation_exception import CancellationException
-from ._task import Task, check_cancel
+from ._task import Task, check_cancel, is_inside_task_run
 
 
 

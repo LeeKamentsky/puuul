@@ -9,17 +9,16 @@ and synchronizing and joining.
 #
 # Copyright under terms of the MIT license - see LICENSE for details
 #
-from ._task import Task
+from ._task import Task, is_inside_task_run
 import threading
 import collections
 import functools
 
 class ThreadPool(object):
     def __init__(self, nthreads=4):
-        self.__lock = threading.RLock()
         self.__ready_task_q = collections.deque()
-        self.__condition = threading.Condition(self.__lock)
-        self.__monitor_condition = threading.Condition(self.__lock)
+        self.__condition = threading.Condition()
+        self.__monitor_condition = threading.Condition()
         self.__started = False
         self.__shutting_down = False
         self.__monitor_thread_q = collections.deque()
@@ -64,6 +63,11 @@ class ThreadPool(object):
         
     def __exit__(self, arg1, arg2, arg3):
         self.stop()
+    
+    @property
+    def n_threads(self):
+        '''Number of worker threads in the pool'''
+        return self.__nthreads
         
     def do(self, fn, *args, **kwargs):
         '''Run the given function on this thread pool
@@ -94,6 +98,25 @@ class ThreadPool(object):
         '''Submit a task to be processed
         
         '''
+        if is_inside_task_run() and task.get_state() == Task.STATE_READY:
+            # Recursively submitting
+            #    There's a danger of thread starvation here. For instance,
+            #    say there's a function that uses tasks and that function
+            #    is called within a task. If you only have one worker thread,
+            #    you will enqueue the subtask from within the worker thread
+            #    and the worker thread can never execute the subtask to unblock.
+            #
+            #    The expedient solution is to run the subtask within the
+            #    worker thread. A better solution would be to use greenlets
+            #    to switch out of the stack context between the parent Task.run
+            #    and the subtask Task.__call__. We could make Task a subclass
+            #    of greenlet and enqueue greenlets (and re-enqueue these
+            #    blocked greenlets). Effectively, swapping stacks = switching
+            #    tasks, so we would use greenlets to make lots of lightweight
+            #    tasklets.
+            #
+            task.run()
+            return
         with self.__monitor_condition:
             self.__monitor_thread_q.append(task)
             self.__monitor_condition.notify()

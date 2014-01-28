@@ -4,7 +4,7 @@
 #
 import unittest
 
-from puuul import Task, CancellationException, check_cancel
+from puuul import Task, CancellationException, check_cancel, is_inside_task_run
 
 class TestTask(unittest.TestCase):
     def test_00_00_instantiate(self):
@@ -115,3 +115,15 @@ class TestTask(unittest.TestCase):
         task.run()
         self.assertRaises(CancellationException, task)
             
+    def test_05_01_inside_task_run(self):
+        iran = [False]
+        def cb(iran=iran):
+            self.assertTrue(is_inside_task_run())
+            iran[0] = True
+        
+        task = Task(cb)
+        task.run()
+        self.assertTrue(iran[0])
+        
+    def test_05_02_not_inside_task_run(self):
+        self.assertFalse(is_inside_task_run())
